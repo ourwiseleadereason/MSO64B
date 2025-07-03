@@ -15,6 +15,7 @@ class MSO64Controller:
         self.save_path = ""  # 基本保存路径
         self.image_path = ""  # 图片保存路径
         self.excel_path = ""  # Excel保存路径
+        self.test_folder_path=""
         
     def connect(self, ip_address):
         """连接到示波器"""
@@ -25,6 +26,8 @@ class MSO64Controller:
             idn = self.scope.query("*IDN?")
             if "MSO64" in idn:
                 self.connected = True
+                #self.scope.write('FILESYSTEM:CWD "C:\\ST\\hsd\\i2c"')
+                #print(self.scope.query("FILESystem:CWD?"))
                 return True, idn
             else:
                 return False, f"发现仪器但不是MSO64: {idn}"
@@ -166,9 +169,9 @@ class MSO64Controller:
             self.scope.write("MEASUREMENT:MEAS1:REFLevels:PERCent:RISELow 10")
             
             # 设置CH1(SOURCE2)的参考电平为30%
-            self.scope.write("MEASUREMENT:MEAS1:REFLevels:PERCent:RISE2High 90")
-            self.scope.write("MEASUREMENT:MEAS1:REFLevels:PERCent:RISE2Mid 30")
-            self.scope.write("MEASUREMENT:MEAS1:REFLevels:PERCent:RISE2Low 10")
+            self.scope.write("MEASUREMENT:CH1:REFLevels:PERCent:RISE2High 90")
+            self.scope.write("MEASUREMENT:CH1:REFLevels:PERCent:RISE2Mid 30")
+            self.scope.write("MEASUREMENT:CH1:REFLevels:PERCent:RISE2Low 10")
             
             # 设置测量的边沿和方向
             self.scope.write("MEASUREMENT:MEAS1:DELAY:DIRECTION1 FORWARDS")
@@ -367,6 +370,7 @@ class MSO64Controller:
             return False, "未连接到示波器"
         
         # 检查图片保存路径
+        image_dir=None
         if self.image_path:
             image_dir = self.image_path
         else:
@@ -472,7 +476,7 @@ class MSO64ControllerGUI:
         ttk.Label(connection_frame, text="示波器IP地址:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
         self.ip_entry = ttk.Entry(connection_frame, width=20)
         self.ip_entry.grid(row=0, column=1, padx=5, pady=5, sticky="w")
-        self.ip_entry.insert(0, "192.168.1.10")  # 默认IP
+        self.ip_entry.insert(0, "169.254.103.178")  # 默认IP
         
         # 连接按钮
         self.connect_button = ttk.Button(connection_frame, text="连接", command=self.connect)
