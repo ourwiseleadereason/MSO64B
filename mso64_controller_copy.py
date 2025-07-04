@@ -19,9 +19,8 @@ class MSO64Controller:
         self.excel_path = ""  # Excel保存路径
         self.time=time.strftime("%Y-%m-%d %H-%M-%S")
         self.folder_name = "Test " + self.time
-        #os.mkdir(self.folder_name)
-        #os.mkdir(os.path.join(self.folder_name, "Parameters"))
-        #os.mkdir(os.path.join(self.folder_name, "Screenshots"))
+        self.upper=None
+        self.lower=None
 
     def connect(self, ip_address):
         """连接到示波器"""
@@ -31,6 +30,7 @@ class MSO64Controller:
             self.scope.timeout = 5000  # 设置超时时间为10秒
             idn = self.scope.query("*IDN?")
             self.scope.write('FILESystem:MKDir "C:\\Test"')
+            self.scope.write(" DISplay:WAVEView1:ZOOM:ZOOM1:HORizontal:SCALe 1")
             #self.scope.write('FILESYSTEM:CWD "C:\\ST\\hsd\\i2c"')
             #print(self.scope.query("FILESystem:CWD?"))
             
@@ -55,6 +55,7 @@ class MSO64Controller:
             return False, "未连接到示波器"
         try:
             self.scope.write("MEASUREMENT:DELETEALL")
+            self.scope.write("SEARCH:DELETEALL")
             return True, "测量项已清除"
         except Exception as e:
             return False, f"清除测量项失败: {str(e)}"
@@ -67,7 +68,6 @@ class MSO64Controller:
         try:
             # 清除所有现有测量
             self.clear_measurements()
-            
             # 添加电压参数
             self.scope.write("MEASUREMENT:ADDMEAS MAXIMUM")
             self.scope.write("MEASUREMENT:MEAS1:SOURCE CH1")
@@ -230,6 +230,7 @@ class MSO64Controller:
             
             # setup time (从CH2上升沿70%到CH1上升沿30%)
             self.scope.write("MEASUREMENT:ADDMEAS DELAY")
+            self.scope.write("MEASUrement:MEAS1:GATing SCREEN")
             self.scope.write("MEASUREMENT:MEAS1:SOURCE1 CH2")
             self.scope.write("MEASUREMENT:MEAS1:SOURCE2 CH1")
             
@@ -294,6 +295,22 @@ class MSO64Controller:
         except Exception as e:
             print(str(e))
             return False, f"添加电压测量项失败: {str(e)}"
+        
+    def get_rise_fall_measurements(self):
+        """获取电压测量值"""
+        if not self.connected:
+            return False, "未连接到示波器", {}
+        
+        try:
+            results = {}
+            results["CH1_Rise"] = float(self.scope.query("MEASUREMENT:MEAS1:VALUE?"))
+            results["CH1_Fall"] = float(self.scope.query("MEASUREMENT:MEAS2:VALUE?"))
+            results["CH2_Rise"] = float(self.scope.query("MEASUREMENT:MEAS3:VALUE?"))
+            results["CH2_Fall"] = float(self.scope.query("MEASUREMENT:MEAS4:VALUE?"))
+            
+            return True, "Rise/Fall测量值获取成功", results
+        except Exception as e:
+            return False, f"获取Rise/Fall测量值失败: {str(e)}", {}
     
     def add_hold_time_measurements(self):
         if not self.connected:
@@ -303,8 +320,8 @@ class MSO64Controller:
             self.scope.write("MEASUREMENT:ADDMEAS DELAY")
             self.scope.write("MEASUREMENT:MEAS1:SOURCE1 CH1")
             self.scope.write("MEASUREMENT:MEAS1:SOURCE2 CH2")
-            
             # 设置参考电平方法为百分比
+            self.scope.write("MEASUrement:MEAS1:GATing SCREEN")
             self.scope.write("MEASUREMENT:MEAS1:REFLevels:METHod PERCent")
             self.scope.write("MEASUrement:REFLevels:TYPE PerSource")
             
@@ -319,31 +336,34 @@ class MSO64Controller:
             self.scope.write("MEASUREMENT:MEAS1:DELAY:EDGE2 FALL")
             self.scope.write("OPC")
 
-            return True, "电压测量项添加成功"
+            return True, "Hold Time测量项添加成功"
         except Exception as e:
             print(str(e))
-            return False, f"添加电压测量项失败: {str(e)}"
+            return False, f"添加Hold Time测量项失败: {str(e)}"
         
     def get_delay_measurement(self):
+        """获取Hold Time测量值"""
+        if not self.connected:
+            return False, "未连接到示波器", {}
+        
+        try:
+            results = {}
+            results["Delay_Rise_Edge_70_30"] = float(self.scope.query("MEASUREMENT:MEAS1:VALUE?"))
+            return True, "Setup Time测量值获取成功", results
+        except Exception as e:
+            return False, f"获取Setup Time测量值失败: {str(e)}", {}
+        
+    def get_hold_measurement(self):
         """获取Setup Time测量值"""
         if not self.connected:
             return False, "未连接到示波器", {}
         
         try:
             results = {}
-            """
-            self.scope.write(f'FILESYSTEM:READFILE "C:\\Test\\setup_time{self.time}.txt"')
-            data=self.scope.read()
-            #fid=open(self.folder_name+"\\Parameters\\setup_time.txt", 'w')
-            #fid.write(data)
-            #fid.close()
-            lines = data.strip().splitlines()
-            results["Delay_Rise_Edge_70_30"] = lines[-1].split(',')[5]
-            """
-            results["Delay_Rise_Edge_70_30"] = float(self.scope.query("MEASUREMENT:MEAS1:VALUE?"))
-            return True, "Setup Time测量值获取成功", results
+            results["Delay_Fall_Edge_30_70"] = float(self.scope.query("MEASUREMENT:MEAS1:VALUE?"))
+            return True, "Hold Time测量值获取成功", results
         except Exception as e:
-            return False, f"获取Setup Time测量值失败: {str(e)}", {}
+            return False, f"获取Hold Time测量值失败: {str(e)}", {}
         
 
     def add_stop_time_measurement(self):
@@ -358,7 +378,7 @@ class MSO64Controller:
             self.scope.write("MEASUREMENT:ADDMEAS DELAY")
             self.scope.write("MEASUREMENT:MEAS1:SOURCE1 CH1")
             self.scope.write("MEASUREMENT:MEAS1:SOURCE2 CH2")
-            
+            self.scope.write("MEASUrement:MEAS1:GATing SCREEN")
             # 设置参考电平方法为百分比
             self.scope.write("MEASUREMENT:MEAS1:REFLevels:METHod PERCent")
             #self.scope.write("MEASUrement:REFLevels:TYPE PerSource")
@@ -366,11 +386,11 @@ class MSO64Controller:
             
             # 设置CH2(SOURCE1)的参考电平为70%
             self.scope.write("MEASUrement:CH1:REFLevels:PERCent:RISEHigh 90")
-            self.scope.write("MEASUrement:CH1:REFLevels:PERCent:RISEMid 30")
+            self.scope.write("MEASUrement:CH1:REFLevels:PERCent:RISEMid 70")
             self.scope.write("MEASUrement:CH1:REFLevels:PERCent:RISELow 10")
             # 设置CH1(SOURCE2)的参考电平为30%
             self.scope.write("MEASUrement:CH2:REFLevels:PERCent:RISEHigh 90")
-            self.scope.write("MEASUrement:CH2:REFLevels:PERCent:RISEMid 70")
+            self.scope.write("MEASUrement:CH2:REFLevels:PERCent:RISEMid 30")
             self.scope.write("MEASUrement:CH2:REFLevels:PERCent:RISELow 10")
             # 设置测量的边沿和方向
             self.scope.write("MEASUREMENT:MEAS1:DELAY:DIRECTION1 FORWARDS")
@@ -381,11 +401,20 @@ class MSO64Controller:
             
             #self.scope.write(f'SAVe:EVENTtable:MEASUrement "C:\\Test\\setup_time{self.time}.txt"')
             self.scope.query("*OPC?")
-            return True, "setup time测量项添加成功"
+            return True, "stop time测量项添加成功"
         except Exception as e:
-            return False, f"添加setup time测量项失败: {str(e)}"
+            return False, f"添加stop time测量项失败: {str(e)}"
         
-    
+    def get_stop_time_measurement(self):
+        if not self.connected:
+            return False, "未连接到示波器", {}
+        
+        try:
+            results = {}
+            results["Stop Time"] = float(self.scope.query("MEASUREMENT:MEAS1:VALUE?"))
+            return True, "Stop Time测量值获取成功", results
+        except Exception as e:
+            return False, f"获取Stop Time测量值失败: {str(e)}", {}
         
     def save_screenshot(self, filename, foldername):
         """保存示波器截图到C:\ST\hsd\i2c目录"""
@@ -517,7 +546,7 @@ class MSO64Controller:
                         else:
                             Col='F'
                             text_col='I'
-                        row+=16*math.floor(index//2)
+                        row=16*math.floor(index//2)+len(df)+3
                         image_path = images[key]
                         img = Image.open(image_path)
                         width, height = img.size
@@ -525,10 +554,6 @@ class MSO64Controller:
                         worksheet.insert_image(f'{Col}{str(row)}', image_path, {'x_scale': x_scale, 'y_scale': y_scale})
                         worksheet.write(f'{text_col}{str(row-1)}', key)
                         index+=1
-
-                    
-
-
             else:
                 os.chdir(self.excel_path)
                 os.mkdir(foldername)
@@ -543,28 +568,27 @@ class MSO64Controller:
                     for i, col in enumerate(df.columns):
                         column_len = max(df[col].astype(str).map(len).max(), len(col))
                         worksheet.set_column(i, i, column_len + 2)  # Add a little extra space
-                    """
-                    startIndex=len(df)+2
-                    startCol='A'
-                    for key in images.keys():
+                    x_scale = 0.33
+                    y_scale = 0.33
+                    Col='A'
+                    index=0
+                    row=len(df)+3
+                    text_col='B'
+                    for key in list(images.keys()):
+                        if index%2==0:
+                            Col='A'
+                            text_col='B'
+                        else:
+                            Col='F'
+                            text_col='I'
+                        row=16*math.floor(index//2)+len(df)+3
                         image_path = images[key]
                         img = Image.open(image_path)
                         width, height = img.size
-                        worksheet.set_column(f'{str(startIndex+1)}:startCol', width / 7)
-                        worksheet.set_row(1, height * 0.75)
-                        worksheet.insert_image(f'{str(startIndex+1)}:startCol', image_path)
-                        if startCol=='A':
-                            startCol=='B'
-                        else:
-                            startCol=='A'
-                        startIndex+=2
-                    """
-                    image_path = images['Voltage']
-                    img = Image.open(image_path)
-                    width, height = img.size
-                    worksheet.set_column('C:C', width / (7*0.33))
-                    worksheet.set_row(1, height * 0.75*0.33)
-                    worksheet.insert_image('C2', {'x_scale': 0.5, 'y_scale': 0.5})
+                    # Insert image at 'C2' with scaling
+                        worksheet.insert_image(f'{Col}{str(row)}', image_path, {'x_scale': x_scale, 'y_scale': y_scale})
+                        worksheet.write(f'{text_col}{str(row-1)}', key)
+                        index+=1
                  
             return True, "Excel saved to "+f"\\{foldername}\\{filename}.xlsx"
         except Exception as e:
@@ -584,20 +608,20 @@ class MSO64Controller:
             self.scope.write("MEASUREMENT:ADDMEAS DELAY")
             self.scope.write("MEASUREMENT:MEAS1:SOURCE1 CH2")
             self.scope.write("MEASUREMENT:MEAS1:SOURCE2 CH1")
-            
+            self.scope.write("MEASUrement:MEAS1:GATing SCREEN")
             # 设置参考电平方法为百分比
             self.scope.write("MEASUREMENT:MEAS1:REFLevels:METHod PERCent")
             self.scope.write("MEASUrement:REFLevels:TYPE PerSource")
             #self.scope.write("MEASUrement:MEAS1:GLOBalref 0")
             
             # 设置CH2(SOURCE1)的参考电平为70%
-            self.scope.write("MEASUrement:CH1:REFLevels:PERCent:RISEHigh 90")
-            self.scope.write("MEASUrement:CH1:REFLevels:PERCent:RISEMid 30")
-            self.scope.write("MEASUrement:CH1:REFLevels:PERCent:RISELow 10")
+            self.scope.write("MEASUrement:CH1:REFLevels:PERCent:FALLHigh 90")
+            self.scope.write("MEASUrement:CH1:REFLevels:PERCent:FALLMid 70")
+            self.scope.write("MEASUrement:CH1:REFLevels:PERCent:FALLLow 10")
             # 设置CH1(SOURCE2)的参考电平为30%
-            self.scope.write("MEASUrement:CH2:REFLevels:PERCent:RISEHigh 90")
-            self.scope.write("MEASUrement:CH2:REFLevels:PERCent:RISEMid 70")
-            self.scope.write("MEASUrement:CH2:REFLevels:PERCent:RISELow 10")
+            self.scope.write("MEASUrement:CH2:REFLevels:PERCent:FALLHigh 90")
+            self.scope.write("MEASUrement:CH2:REFLevels:PERCent:FALLMid 30")
+            self.scope.write("MEASUrement:CH2:REFLevels:PERCent:FALLLow 10")
             # 设置测量的边沿和方向
             self.scope.write("MEASUREMENT:MEAS1:DELAY:DIRECTION1 FORWARDS")
             self.scope.write("MEASUREMENT:MEAS1:DELAY:DIRECTION2 FORWARDS")
@@ -607,39 +631,51 @@ class MSO64Controller:
             
             #self.scope.write(f'SAVe:EVENTtable:MEASUrement "C:\\Test\\setup_time{self.time}.txt"')
             self.scope.query("*OPC?")
-            return True, "setup time测量项添加成功"
+            return True, "Start Hold Time测量项添加成功"
         except Exception as e:
-            return False, f"添加setup time测量项失败: {str(e)}"
+            return False, f"添加Start Hold Time测量项失败: {str(e)}"
+        
+    def get_start_hold_time(self):
+        """获取Setup Time测量值"""
+        if not self.connected:
+            return False, "未连接到示波器", {}
+        
+        try:
+            results = {}
+            results["Start Hold Time"] = float(self.scope.query("MEASUREMENT:MEAS1:VALUE?"))
+            return True, "Start Hold Time测量值获取成功", results
+        except Exception as e:
+            return False, f"获取Start Hold Time测量值失败: {str(e)}", {}
         
     def zoom_on_rising_edge(self):
         if not self.connected:
             return False, "未连接到示波器"
         try:
-
             self.clear_measurements()
-            # Optionally, use search to locate the rising edge
-            self.scope.write("SEARCH:CLEAr")  # Clear existing searches
+            # Optionally, use search to locate the rising edge # Clear existing searches
             self.scope.write("SEARCH:ADDNew SEARCH1")
             self.scope.write("SEARCH:SEARCH1:TRIGger:A:TYPe EDGE")
             self.scope.write("SEARCH:SEARCH1:TRIGger:A:SOUrce CH1")
             self.scope.write("SEARCH:SEARCH1:TRIGger:A:EDGE:SLOPe RISE")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:EDGE:THReshold 1.5")
             self.scope.write("SEARCH:SEARCH1:STATE ON")
             self.scope.write("DISPLAY:WAVEVIEW1:ZOOM:ZOOM1:HORIZONTAL:POSITION 0")
             # Wait for acquisition and search   
             self.scope.query("*OPC?")  # Ensure acquisition completes
             self.scope.write("SEARCH:SEARCH1:NAVigate NEXT")
-            #self.scope.write("MEASUrement:REFLEVELS:TYPE GLOBAL")
+            self.scope.write("MEASUrement:REFLEVELS:TYPE GLOBAL")
             # 添加电压参数
             self.scope.write("MEASUREMENT:ADDMEAS RISETIME")
             self.scope.write("MEASUREMENT:MEAS1:SOURCE CH1")
-            self.scope.write("MEASUrement:REFLevels:PERCent:RISEHigh 90")
+            self.scope.write("MEASUrement:MEAS1:GATing NONE")
+            self.scope.write("MEASUrement:REFLevels:PERCent:RISEHigh 70")
             self.scope.write("MEASUrement:REFLevels:PERCent:RISEMid 50")
-            self.scope.write("MEASUrement:REFLevels:PERCent:RISELow 10")
+            self.scope.write("MEASUrement:REFLevels:PERCent:RISELow 30")
             self.scope.query("*OPC?")
             scale=float(self.scope.query("MEASUREMENT:MEAS1:VALUE?"))
-            print(scale)
             
-            self.scope.write(f":DISPLAY:WAVEVIEW1:ZOOM:ZOOM1:HORIZONTAL:WINSCALE {scale/4}")
+            self.scope.write(f":DISPLAY:WAVEVIEW1:ZOOM:ZOOM1:HORIZONTAL:WINSCALE {scale/2}")
+            #current
 
             """
             # Enable zoom and center on the edge
@@ -663,6 +699,7 @@ class MSO64Controller:
             self.scope.write("SEARCH:SEARCH1:TRIGger:A:TYPe EDGE")
             self.scope.write("SEARCH:SEARCH1:TRIGger:A:SOUrce CH1")
             self.scope.write("SEARCH:SEARCH1:TRIGger:A:EDGE:SLOPe FALL")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:EDGE:THReshold 1.5")
             self.scope.write("SEARCH:SEARCH1:STATE ON")
             self.scope.write("DISPLAY:WAVEVIEW1:ZOOM:ZOOM1:HORIZONTAL:POSITION 0")
             # Wait for acquisition and search   
@@ -672,22 +709,370 @@ class MSO64Controller:
             # 添加电压参数
             self.scope.write("MEASUREMENT:ADDMEAS FALLTIME")
             self.scope.write("MEASUREMENT:MEAS1:SOURCE CH1")
-            self.scope.write("MEASUrement:REFLevels:PERCent:FALLHigh 90")
+            self.scope.write("MEASUrement:MEAS1:GATing NONE")
+            self.scope.write("MEASUrement:REFLevels:PERCent:FALLHigh 70")
             self.scope.write("MEASUrement:REFLevels:PERCent:FALLMid 50")
-            self.scope.write("MEASUrement:REFLevels:PERCent:FALLLow 10")
+            self.scope.write("MEASUrement:REFLevels:PERCent:FALLLow 30")
             self.scope.query("*OPC?")
             scale=float(self.scope.query("MEASUREMENT:MEAS1:VALUE?"))
             self.scope.write(f":DISPLAY:WAVEVIEW1:ZOOM:ZOOM1:HORIZONTAL:WINSCALE {scale/4}")
+            
 
             return True, "success"
         except Exception as e:
             return False, f"添加setup time测量项失败: {str(e)}"
 
+    def zoom_middle(self):
+        if not self.connected:
+            return False, "未连接到示波器"
+        try:
+            self.clear_measurements()
+            # Optionally, use search to locate the rising edge
+            self.scope.write("SEARCH:ADDNew SEARCH1")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:TYPe EDGE")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:SOUrce CH1")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:EDGE:SLOPe RISE")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:EDGE:THReshold 1.5")
+            self.scope.write("SEARCH:SEARCH1:STATE ON")
+            self.scope.query("*OPC?")
+
+            n=self.scope.query("SEARCH:SEARCH1:TOTAL?")
+            self.scope.write("DISPLAY:WAVEVIEW1:ZOOM:ZOOM1:HORIZONTAL:POSITION 0")
+
+            for i in range(4):
+                self.scope.write("SEARCH:SEARCH1:NAVigate NEXT")
+                self.scope.query("*OPC?")
+
+            # 正脉宽 (从70%到70%)
+            self.scope.write("MEASUREMENT:ADDMEAS PWIDTH")
+            self.scope.write("MEASUREMENT:MEAS2:SOURCE CH1")
+            # 设置参考电平方法为百分比
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:METHod PERCent")
+            self.scope.write("MEASUrement:MEAS2:GLOBalref 0")
+            # 设置上升沿参考电平
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:RISEHigh 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:RISEMid 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:RISELow 70")
+            # 设置下降沿参考电平
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:FALLHigh 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:FALLMid 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:FALLLow 70")
+            
+            # 负脉宽 (从30%到30%)
+            self.scope.write("MEASUREMENT:ADDMEAS NWIDTH")
+            self.scope.write("MEASUREMENT:MEAS3:SOURCE CH1")
+            # 设置参考电平方法为百分比
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:METHod PERCent")
+            self.scope.write("MEASUrement:MEAS3:GLOBalref 0")
+            # 设置上升沿参考电平
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:RISEHigh 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:RISEMid 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:RISELow 30")
+            # 设置下降沿参考电平
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:FALLHigh 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:FALLMid 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:FALLLow 30")
+            self.scope.query("*OPC?")
+            if self.upper is None:
+                self.upper=float(self.scope.query("MEASUREMENT:MEAS2:VALUE?"))
+            if self.lower is None:
+                self.lower=float(self.scope.query("MEASUREMENT:MEAS3:VALUE?"))
+            self.scope.write(f":DISPLAY:WAVEVIEW1:ZOOM:ZOOM1:HORIZONTAL:WINSCALE {(self.upper+self.lower)/1.25}")
+            self.clear_measurements()
+            self.scope.write("SEARCH:DELETEALL")
+            return True, "success"
+        except Exception as e:
+            return False, f"添加setup time测量项失败: {str(e)}"
+        
+    def zoom_hold_time(self):
+        #find 2nd ch2 falling edge
+        if not self.connected:
+            return False, "未连接到示波器"
+        try:
+            self.clear_measurements()
+            # Optionally, use search to locate the rising edge
+            self.scope.write("SEARCH:DELETEALL")
+            self.scope.write("SEARCH:ADDNew SEARCH1")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:TYPe EDGE")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:EDGE:SOUrce CH2")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:EDGE:SLOPe FALL")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:EDGE:THReshold 1.5")
+            self.scope.write("SEARCH:SEARCH1:STATE ON")
+            self.scope.query("*OPC?")
+            
+            n=self.scope.query("SEARCH:SEARCH1:TOTAL?")
+            #print(n)
+            
+            self.scope.write("DISPLAY:WAVEVIEW1:ZOOM:ZOOM1:HORIZONTAL:POSITION -2000")
+            for i in range(2):
+                self.scope.write("SEARCH:SEARCH1:NAVigate NEXT")
+                self.scope.query("*OPC?")
+
+             # 正脉宽 (从70%到70%)
+            self.scope.write("MEASUREMENT:ADDMEAS PWIDTH")
+            self.scope.write("MEASUREMENT:MEAS2:SOURCE CH1")
+            # 设置参考电平方法为百分比
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:METHod PERCent")
+            self.scope.write("MEASUrement:MEAS2:GLOBalref 0")
+            # 设置上升沿参考电平
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:RISEHigh 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:RISEMid 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:RISELow 70")
+            # 设置下降沿参考电平
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:FALLHigh 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:FALLMid 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:FALLLow 70")
+            
+            # 负脉宽 (从30%到30%)
+            self.scope.write("MEASUREMENT:ADDMEAS NWIDTH")
+            self.scope.write("MEASUREMENT:MEAS3:SOURCE CH1")
+            # 设置参考电平方法为百分比
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:METHod PERCent")
+            self.scope.write("MEASUrement:MEAS3:GLOBalref 0")
+            # 设置上升沿参考电平
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:RISEHigh 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:RISEMid 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:RISELow 30")
+            # 设置下降沿参考电平
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:FALLHigh 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:FALLMid 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:FALLLow 30")
+            self.scope.query("*OPC?")
+
+            if self.upper is None:
+                self.upper=float(self.scope.query("MEASUREMENT:MEAS2:VALUE?"))
+                self.scope.query("*OPC?")
+            if self.lower is None:
+                self.lower=float(self.scope.query("MEASUREMENT:MEAS3:VALUE?"))
+                self.scope.query("*OPC?")
+            current_scale=float(self.scope.query("DISplay:WAVEView1:ZOOM:ZOOM1:HORizontal:WINSCALe?"))
+            self.scope.query("*OPC?")
+            print(current_scale)
+            if (self.upper+self.lower)/10!=current_scale:
+                self.scope.write(f":DISPLAY:WAVEVIEW1:ZOOM:ZOOM1:HORIZONTAL:WINSCALE {(self.upper+self.lower)/10}")
+            #print(current_position)
+            #self.scope.write("DISPLAY:WAVEVIEW1:ZOOM:ZOOM1:HORIZONTAL:POSITION 30")
+            
+        except Exception as e:
+            return False, e
+        return True, ":)"
+    
+    def zoom_setup_time(self):
+        #find 2nd ch2 falling edge
+        if not self.connected:
+            return False, "未连接到示波器"
+        try:
+            self.clear_measurements()
+            # find 1st ch2 rising edge
+            self.scope.write("SEARCH:DELETEALL")
+            self.scope.write("SEARCH:ADDNew SEARCH1")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:TYPe EDGE")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:EDGE:SOUrce CH2")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:EDGE:SLOPe RISE")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:EDGE:THReshold 1.5")
+            self.scope.write("SEARCH:SEARCH1:STATE ON")
+            self.scope.query("*OPC?")
+            
+            
+            self.scope.write("DISPLAY:WAVEVIEW1:ZOOM:ZOOM1:HORIZONTAL:POSITION -2000")
+            for i in range(1):
+                self.scope.write("SEARCH:SEARCH1:NAVigate NEXT")
+                self.scope.query("*OPC?")
+
+             # 正脉宽 (从70%到70%)
+            self.scope.write("MEASUREMENT:ADDMEAS PWIDTH")
+            self.scope.write("MEASUREMENT:MEAS2:SOURCE CH1")
+            # 设置参考电平方法为百分比
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:METHod PERCent")
+            self.scope.write("MEASUrement:MEAS2:GLOBalref 0")
+            # 设置上升沿参考电平
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:RISEHigh 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:RISEMid 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:RISELow 70")
+            # 设置下降沿参考电平
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:FALLHigh 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:FALLMid 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:FALLLow 70")
+            
+            # 负脉宽 (从30%到30%)
+            self.scope.write("MEASUREMENT:ADDMEAS NWIDTH")
+            self.scope.write("MEASUREMENT:MEAS3:SOURCE CH1")
+            # 设置参考电平方法为百分比
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:METHod PERCent")
+            self.scope.write("MEASUrement:MEAS3:GLOBalref 0")
+            # 设置上升沿参考电平
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:RISEHigh 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:RISEMid 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:RISELow 30")
+            # 设置下降沿参考电平
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:FALLHigh 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:FALLMid 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:FALLLow 30")
+            self.scope.query("*OPC?")
+
+            if self.upper is None:
+                self.upper=float(self.scope.query("MEASUREMENT:MEAS2:VALUE?"))
+                self.scope.query("*OPC?")
+            if self.lower is None:
+                self.lower=float(self.scope.query("MEASUREMENT:MEAS3:VALUE?"))
+                self.scope.query("*OPC?")
+            current_scale=float(self.scope.query("DISplay:WAVEView1:ZOOM:ZOOM1:HORizontal:WINSCALe?"))
+            self.scope.query("*OPC?")
+            print(current_scale)
+            if (self.upper+self.lower)/10!=current_scale:
+                self.scope.write(f":DISPLAY:WAVEVIEW1:ZOOM:ZOOM1:HORIZONTAL:WINSCALE {(self.upper+self.lower)/10}")
+            #print(current_position)
+            #self.scope.write("DISPLAY:WAVEVIEW1:ZOOM:ZOOM1:HORIZONTAL:POSITION 30")
+            
+        except Exception as e:
+            return False, e
+        return True, ":)"
+    
+    def zoom_start(self):
+        #find 2nd ch2 falling edge
+        if not self.connected:
+            return False, "未连接到示波器"
+        try:
+            self.clear_measurements()
+            # find 1st ch2 rising edge
+            self.scope.write("SEARCH:DELETEALL")
+            self.scope.write("SEARCH:ADDNew SEARCH1")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:TYPe EDGE")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:EDGE:SOUrce CH2")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:EDGE:SLOPe FALL")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:EDGE:THReshold 1.5")
+            self.scope.write("SEARCH:SEARCH1:STATE ON")
+            self.scope.query("*OPC?")
+            
+            
+            self.scope.write("DISPLAY:WAVEVIEW1:ZOOM:ZOOM1:HORIZONTAL:POSITION -2000")
+            for i in range(1):
+                self.scope.write("SEARCH:SEARCH1:NAVigate NEXT")
+                self.scope.query("*OPC?")
+
+             # 正脉宽 (从70%到70%)
+            self.scope.write("MEASUREMENT:ADDMEAS PWIDTH")
+            self.scope.write("MEASUREMENT:MEAS2:SOURCE CH1")
+            # 设置参考电平方法为百分比
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:METHod PERCent")
+            self.scope.write("MEASUrement:MEAS2:GLOBalref 0")
+            # 设置上升沿参考电平
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:RISEHigh 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:RISEMid 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:RISELow 70")
+            # 设置下降沿参考电平
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:FALLHigh 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:FALLMid 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:FALLLow 70")
+            
+            # 负脉宽 (从30%到30%)
+            self.scope.write("MEASUREMENT:ADDMEAS NWIDTH")
+            self.scope.write("MEASUREMENT:MEAS3:SOURCE CH1")
+            # 设置参考电平方法为百分比
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:METHod PERCent")
+            self.scope.write("MEASUrement:MEAS3:GLOBalref 0")
+            # 设置上升沿参考电平
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:RISEHigh 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:RISEMid 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:RISELow 30")
+            # 设置下降沿参考电平
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:FALLHigh 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:FALLMid 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:FALLLow 30")
+            self.scope.query("*OPC?")
+
+            if self.upper is None:
+                self.upper=float(self.scope.query("MEASUREMENT:MEAS2:VALUE?"))
+                self.scope.query("*OPC?")
+            if self.lower is None:
+                self.lower=float(self.scope.query("MEASUREMENT:MEAS3:VALUE?"))
+                self.scope.query("*OPC?")
+            current_scale=float(self.scope.query("DISplay:WAVEView1:ZOOM:ZOOM1:HORizontal:WINSCALe?"))
+            self.scope.query("*OPC?")
+            print(current_scale)
+            if (self.upper+self.lower)/10!=current_scale:
+                self.scope.write(f":DISPLAY:WAVEVIEW1:ZOOM:ZOOM1:HORIZONTAL:WINSCALE {(self.upper+self.lower)/5}")
+            #print(current_position)
+            #self.scope.write("DISPLAY:WAVEVIEW1:ZOOM:ZOOM1:HORIZONTAL:POSITION 30")
+            
+        except Exception as e:
+            return False, e
+        return True, ":)"
+    
+    def zoom_stop(self):
+        #find 2nd ch2 falling edge
+        if not self.connected:
+            return False, "未连接到示波器"
+        try:
+            self.clear_measurements()
+            # find 1st ch2 rising edge
+            self.scope.write("SEARCH:DELETEALL")
+            self.scope.write("SEARCH:ADDNew SEARCH1")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:TYPe EDGE")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:EDGE:SOUrce CH2")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:EDGE:SLOPe RISE")
+            self.scope.write("SEARCH:SEARCH1:TRIGger:A:EDGE:THReshold 1.5")
+            self.scope.write("SEARCH:SEARCH1:STATE ON")
+            self.scope.query("*OPC?")
+            
+            
+            self.scope.write("DISPLAY:WAVEVIEW1:ZOOM:ZOOM1:HORIZONTAL:POSITION 2000")
+            for i in range(1):
+                self.scope.write("SEARCH:SEARCH1:NAVigate PREVious")
+                self.scope.query("*OPC?")
+
+             # 正脉宽 (从70%到70%)
+            self.scope.write("MEASUREMENT:ADDMEAS PWIDTH")
+            self.scope.write("MEASUREMENT:MEAS2:SOURCE CH1")
+            # 设置参考电平方法为百分比
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:METHod PERCent")
+            self.scope.write("MEASUrement:MEAS2:GLOBalref 0")
+            # 设置上升沿参考电平
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:RISEHigh 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:RISEMid 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:RISELow 70")
+            # 设置下降沿参考电平
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:FALLHigh 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:FALLMid 70")
+            self.scope.write("MEASUREMENT:MEAS2:REFLevels:PERCent:FALLLow 70")
+            
+            # 负脉宽 (从30%到30%)
+            self.scope.write("MEASUREMENT:ADDMEAS NWIDTH")
+            self.scope.write("MEASUREMENT:MEAS3:SOURCE CH1")
+            # 设置参考电平方法为百分比
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:METHod PERCent")
+            self.scope.write("MEASUrement:MEAS3:GLOBalref 0")
+            # 设置上升沿参考电平
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:RISEHigh 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:RISEMid 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:RISELow 30")
+            # 设置下降沿参考电平
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:FALLHigh 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:FALLMid 30")
+            self.scope.write("MEASUREMENT:MEAS3:REFLevels:PERCent:FALLLow 30")
+            self.scope.query("*OPC?")
+
+            if self.upper is None:
+                self.upper=float(self.scope.query("MEASUREMENT:MEAS2:VALUE?"))
+                self.scope.query("*OPC?")
+            if self.lower is None:
+                self.lower=float(self.scope.query("MEASUREMENT:MEAS3:VALUE?"))
+                self.scope.query("*OPC?")
+            current_scale=float(self.scope.query("DISplay:WAVEView1:ZOOM:ZOOM1:HORizontal:WINSCALe?"))
+            self.scope.query("*OPC?")
+            print(current_scale)
+            if (self.upper+self.lower)/10!=current_scale:
+                self.scope.write(f":DISPLAY:WAVEVIEW1:ZOOM:ZOOM1:HORIZONTAL:WINSCALE {(self.upper+self.lower)/5}")
+            return True, ":)"
+        except Exception as e:
+            return False, e
+
+
 class MSO64ControllerGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("MSO64示波器控制器")
-        self.root.geometry("800x700")
+        self.root.geometry("1200x700")
         self.controller = MSO64Controller()
         self.create_widgets()
         self.measured_voltage=False
@@ -696,6 +1081,10 @@ class MSO64ControllerGUI:
         self.res={}
         self.images={}#schema: name, file path
         self.excels=1
+        self.measured_rise_fall=False
+        self.measured_hold=False
+        self.measured_start_hold=False
+        self.measured_stop_setup=False
         
         
     def create_widgets(self):
@@ -706,7 +1095,7 @@ class MSO64ControllerGUI:
         ttk.Label(connection_frame, text="示波器IP地址:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
         self.ip_entry = ttk.Entry(connection_frame, width=20)
         self.ip_entry.grid(row=0, column=1, padx=5, pady=5, sticky="w")
-        self.ip_entry.insert(0, "169.254.103.178")  # 默认IP
+        self.ip_entry.insert(0, "169.254.123.124")  # 默认IP
 
         # 连接按钮
         self.connect_button = ttk.Button(connection_frame, text="连接", command=self.connect)
@@ -730,12 +1119,13 @@ class MSO64ControllerGUI:
         self.image_browse_button.grid(row=0, column=3, padx=5, pady=5)
 
         # 保存到示波器选项
+        """
         self.save_to_scope_image = tk.BooleanVar()
         self.save_to_scope_image_check = ttk.Checkbutton(test_frame, text="保存到示波器", 
                                                           variable=self.save_to_scope_image,
                                                           command=self.toggle_image_path)
         self.save_to_scope_image_check.grid(row=0, column=4, padx=5, pady=5)
-
+        """
         # Excel保存路径
         ttk.Label(test_frame, text="Excel保存路径:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
         self.excel_path_entry = ttk.Entry(test_frame, width=35)
@@ -746,12 +1136,13 @@ class MSO64ControllerGUI:
         self.excel_browse_button.grid(row=1, column=3, padx=5, pady=5)
         
         # 保存到示波器选项
+        """
         self.save_to_scope_excel = tk.BooleanVar()
         self.save_to_scope_excel_check = ttk.Checkbutton(test_frame, text="保存到示波器", 
                                                          variable=self.save_to_scope_excel,
                                                          command=self.toggle_excel_path)
         self.save_to_scope_excel_check.grid(row=1, column=4, padx=5, pady=5)
-
+        """
         
         # 文件夹名称
         ttk.Label(test_frame, text="文件夹名称:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
@@ -768,6 +1159,21 @@ class MSO64ControllerGUI:
         
         self.delay_button = ttk.Button(test_frame, text="添加Setup Time测量", command=self.add_delay_measurement)
         self.delay_button.grid(row=3, column=2, padx=5, pady=5)
+
+        self.rise_fall_button = ttk.Button(test_frame, text="添加Rise/Fall测量", command=self.add_rise_fall_measurements)
+        self.rise_fall_button.grid(row=3, column=3, padx=5, pady=5)
+
+        self.hold_time_button = ttk.Button(test_frame, text="添加Hold Time测量", command=self.add_hold_time_measurement)
+        self.hold_time_button.grid(row=3, column=4, padx=5, pady=5)
+
+        self.start_hold_time_button = ttk.Button(test_frame, text="添加Start Hold Time测量", command=self.add_start_hold_time_measurement)
+        self.start_hold_time_button.grid(row=3, column=5, padx=5, pady=5)
+
+        self.stop_setup_time_button = ttk.Button(test_frame, text="添加Stop Setup Time测量", command=self.add_stop_setup_time_measurement)
+        self.stop_setup_time_button.grid(row=3, column=6, padx=5, pady=5)
+
+        self.run_all_tests_button = ttk.Button(test_frame, text="Write Cycle", command=self.run_all_tests)
+        self.run_all_tests_button.grid(row=4, column=0, padx=5, pady=5)
 
         # 创建测量显示框架
         measurement_frame = ttk.LabelFrame(self.root, text="测量结果")
@@ -789,9 +1195,21 @@ class MSO64ControllerGUI:
         self.delay_tab = ttk.Frame(self.tab_control)
         self.tab_control.add(self.delay_tab, text="Setup Time参数")
 
+        self.rise_fall_tab=ttk.Frame(self.tab_control)
+        self.tab_control.add(self.rise_fall_tab, text="Rise/Fall参数")
+
+        self.hold_time_tab=ttk.Frame(self.tab_control)
+        self.tab_control.add(self.hold_time_tab, text="Hold Time参数")
+
+        self.start_hold_time_tab=ttk.Frame(self.tab_control)
+        self.tab_control.add(self.start_hold_time_tab, text="Start Hold Time参数")
+
+        self.stop_setup_time_tab=ttk.Frame(self.tab_control)
+        self.tab_control.add(self.stop_setup_time_tab, text="Stop Setup Time参数")
+
         # 运行测试按钮
         self.run_test_button = ttk.Button(test_frame, text="Save to Excel", command=self.save_excel)
-        self.run_test_button.grid(row=3, column=3, padx=5, pady=5)
+        self.run_test_button.grid(row=3, column=7, padx=5, pady=5)
 
         # 创建电压测量参数表
         self.create_voltage_tab()
@@ -801,6 +1219,14 @@ class MSO64ControllerGUI:
         
         # 创建Setup Time测量参数表
         self.create_delay_tab()
+
+        self.create_rise_fall_tab()
+
+        self.create_hold_time_tab()
+
+        self.create_start_hold_time_tab()
+
+        self.create_stop_setup_time_tab()
 
         # 创建状态面板
         status_frame = ttk.LabelFrame(self.root, text="保存状态")
@@ -829,6 +1255,41 @@ class MSO64ControllerGUI:
         self.log_text.pack(fill="both", expand=True, padx=5, pady=5)
 
         self.update_button_states(False)
+
+    def run_all_tests(self):
+        if self.controller.excel_path is None:
+            messagebox.showerror("错误", "File path has not been configured!")
+            return
+        if self.controller.image_path is None:
+            messagebox.showerror("错误", "Image path has not been configured!")
+            return
+        self.add_voltage_measurements()
+        self.get_voltage_measurements()
+        self.save_screenshot("Voltage")
+        self.add_frequency_measurements()
+        self.get_frequency_measurements()
+        self.save_screenshot("Frequency")
+        self.add_delay_measurement()
+        self.get_delay_measurement()
+        self.save_screenshot("Setup Time")
+        self.add_rise_fall_measurements()
+        self.get_rise_fall_measurements()
+        self.save_screenshot("Rise Fall")
+        self.add_hold_time_measurement()
+        self.get_hold_time_measurement()
+        self.save_screenshot("Hold Time")
+        self.add_start_hold_time_measurement()
+        self.get_start_hold_time_measurement()
+        self.save_screenshot("Start Hold Time")
+        self.add_stop_setup_time_measurement()
+        self.get_stop_setup_time_measurement()
+        self.save_screenshot("Stop Setup Time")
+        self.controller.zoom_on_rising_edge()
+        self.save_screenshot("Rising Edge")
+        self.controller.zoom_on_falling_edge()
+        self.save_screenshot("Falling Edge")
+        self.save_excel()
+
     
     def connect(self):
         ip_address = self.ip_entry.get().strip()
@@ -888,6 +1349,7 @@ class MSO64ControllerGUI:
             return
         
         self.log_message("正在添加电压测量项...")
+        self.controller.zoom_middle()
         success, message = self.controller.add_voltage_measurements()
         self.log_message(message)
         
@@ -899,12 +1361,31 @@ class MSO64ControllerGUI:
         else:
             messagebox.showerror("错误", message)
 
+    def add_rise_fall_measurements(self):
+        if not self.controller.connected:
+            messagebox.showerror("错误", "未连接到示波器")
+            return
+        
+        self.log_message("正在添加Rise/Fall测量项...")
+        self.controller.zoom_middle()
+        success, message = self.controller.add_rise_fall_measurements()
+        self.log_message(message)
+        
+        if success:
+            self.measured_rise_fall=True
+            messagebox.showinfo("成功", "Rise/Fall测量项添加成功\n")
+            # 切换到电压选项卡
+            self.tab_control.select(self.rise_fall_tab)
+        else:
+            messagebox.showerror("错误", message)
+
     def add_frequency_measurements(self):
         if not self.controller.connected:
             messagebox.showerror("错误", "未连接到示波器")
             return
         
         self.log_message("正在添加频率测量项...")
+        self.controller.zoom_middle()
         success, message = self.controller.add_frequency_measurements()
         self.log_message(message)
         
@@ -922,6 +1403,7 @@ class MSO64ControllerGUI:
             return
         
         self.log_message("正在添加Setup Time测量项...")
+        self.controller.zoom_setup_time()
         success, message = self.controller.add_delay_measurement()
         self.log_message(message)
         
@@ -933,8 +1415,61 @@ class MSO64ControllerGUI:
         else:
             messagebox.showerror("错误", message)
 
+    def add_hold_time_measurement(self):
+        if not self.controller.connected:
+            messagebox.showerror("错误", "未连接到示波器")
+            return
+        
+        self.log_message("正在添加Hold Time测量项...")
+        self.controller.zoom_hold_time()
+        success, message = self.controller.add_hold_time_measurements()
+        self.log_message(message)
+        
+        if success:
+            self.measured_hold=True
+            messagebox.showinfo("成功", "Hold Time测量项添加成功\n")
+            # 切换到延迟选项卡
+            self.tab_control.select(self.hold_time_tab)
+        else:
+            messagebox.showerror("错误", message)
+
+    def add_start_hold_time_measurement(self):
+        if not self.controller.connected:
+            messagebox.showerror("错误", "未连接到示波器")
+            return
+        
+        self.log_message("正在添加Start Hold Time测量项...")
+        self.controller.zoom_start()
+        success, message = self.controller.add_delay2_measurement()
+        self.log_message(message)
+        
+        if success:
+            self.measured_start_hold=True
+            messagebox.showinfo("成功", "Start Hold Time测量项添加成功\n")
+            # 切换到延迟选项卡
+            self.tab_control.select(self.start_hold_time_tab)
+        else:
+            messagebox.showerror("错误", message)
+
+    def add_stop_setup_time_measurement(self):
+        if not self.controller.connected:
+            messagebox.showerror("错误", "未连接到示波器")
+            return
+        
+        self.log_message("正在添加Start Hold Time测量项...")
+        self.controller.zoom_stop()
+        success, message = self.controller.add_stop_time_measurement()
+        self.log_message(message)
+        
+        if success:
+            self.measured_stop_setup=True
+            messagebox.showinfo("成功", "Stop Setup Time测量项添加成功\n")
+            # 切换到延迟选项卡
+            self.tab_control.select(self.stop_setup_time_tab)
+        else:
+            messagebox.showerror("错误", message)
+    """
     def toggle_excel_path(self):
-        """切换Excel保存位置为示波器或本地路径"""
         if self.save_to_scope_excel.get():
             self.excel_path_entry.config(state="disabled")
             self.controller.excel_path = "oscilloscope"
@@ -943,7 +1478,7 @@ class MSO64ControllerGUI:
             self.excel_path_entry.config(state="normal")
             self.controller.excel_path = self.excel_path_entry.get()
             self.log_message(f"Excel将保存到本地路径: {self.controller.excel_path}")
-
+    """
     def browse_excel_path(self):
         path = filedialog.askdirectory()
         newPath=path.replace('/', '\\')
@@ -952,7 +1487,7 @@ class MSO64ControllerGUI:
             self.excel_path_entry.insert(0, newPath)
             self.controller.excel_path = newPath
             self.log_message(f"已选择Excel保存路径: {newPath}")
-
+    
 
     def create_voltage_tab(self):
         """创建电压测量参数表"""
@@ -1042,6 +1577,84 @@ class MSO64ControllerGUI:
         # Screenshot
         self.setup_screenshot_button = ttk.Button(self.delay_tab, text="Save Screenshot", command=lambda: self.save_screenshot("Setup Time"))
         self.setup_screenshot_button.grid(row=3, column=0, columnspan=2, padx=5, pady=5)
+    
+    def create_hold_time_tab(self):
+        """创建hold time测量参数表"""
+        ttk.Label(self.hold_time_tab, text="Hold Time参数", font=("Arial", 10, "bold")).grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="w")
+        
+        ttk.Label(self.hold_time_tab, text="Hold Time (CH1下降沿30% 到 CH2下降沿70%):").grid(row=1, column=0, padx=5, pady=2, sticky="w")
+        self.hold_time_value = ttk.Label(self.hold_time_tab, text="--")
+        self.hold_time_value.grid(row=1, column=1, padx=5, pady=2, sticky="w")
+        
+        # 获取setup time测量值按钮
+        self.get_hold_time_button = ttk.Button(self.hold_time_tab, text="获取Hold Time测量值", command=self.get_hold_time_measurement)
+        self.get_hold_time_button.grid(row=2, column=0, columnspan=2, padx=5, pady=5)
+
+        # Screenshot
+        self.hold_time_screenshot_button = ttk.Button(self.hold_time_tab, text="Save Screenshot", command=lambda: self.save_screenshot("Hold Time"))
+        self.hold_time_screenshot_button.grid(row=3, column=0, columnspan=2, padx=5, pady=5)
+    
+    def create_start_hold_time_tab(self):
+        """创建hold time测量参数表"""
+        ttk.Label(self.start_hold_time_tab, text="Start Hold Time参数", font=("Arial", 10, "bold")).grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="w")
+        
+        ttk.Label(self.start_hold_time_tab, text="Start Hold Time (CH2下降沿70% 到 CH1下降沿30%):").grid(row=1, column=0, padx=5, pady=2, sticky="w")
+        self.start_hold_time_value = ttk.Label(self.start_hold_time_tab, text="--")
+        self.start_hold_time_value.grid(row=1, column=1, padx=5, pady=2, sticky="w")
+        
+        # 获取setup time测量值按钮
+        self.get_start_hold_time_button = ttk.Button(self.start_hold_time_tab, text="获取Start Hold Time测量值", command=self.get_start_hold_time_measurement)
+        self.get_start_hold_time_button.grid(row=2, column=0, columnspan=2, padx=5, pady=5)
+
+        # Screenshot
+        self.start_hold_time_screenshot_button = ttk.Button(self.start_hold_time_tab, text="Save Screenshot", command=lambda: self.save_screenshot("Start Hold Time"))
+        self.start_hold_time_screenshot_button.grid(row=3, column=0, columnspan=2, padx=5, pady=5)
+    
+    def create_stop_setup_time_tab(self):
+        """创建hold time测量参数表"""
+        ttk.Label(self.stop_setup_time_tab, text="Stop Setup Time参数", font=("Arial", 10, "bold")).grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="w")
+        
+        ttk.Label(self.stop_setup_time_tab, text="Stop Setup Time (CH1上升沿30% 到 CH2上升沿70%):").grid(row=1, column=0, padx=5, pady=2, sticky="w")
+        self.stop_setup_time_value = ttk.Label(self.stop_setup_time_tab, text="--")
+        self.stop_setup_time_value.grid(row=1, column=1, padx=5, pady=2, sticky="w")
+        
+        # 获取setup time测量值按钮
+        self.get_stop_setup_time_button = ttk.Button(self.stop_setup_time_tab, text="获取Stop Setup Time测量值", command=self.get_stop_setup_time_measurement)
+        self.get_stop_setup_time_button.grid(row=2, column=0, columnspan=2, padx=5, pady=5)
+
+        # Screenshot
+        self.stop_setup_time_screenshot_button = ttk.Button(self.stop_setup_time_tab, text="Save Screenshot", command=lambda: self.save_screenshot("Stop Setup Time"))
+        self.stop_setup_time_screenshot_button.grid(row=3, column=0, columnspan=2, padx=5, pady=5)
+
+    def create_rise_fall_tab(self):
+        """创建rise/fall测量参数表"""
+        # CH1电压参数
+        ttk.Label(self.rise_fall_tab, text="Rise/Fall Times", font=("Arial", 10, "bold")).grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="w")
+        
+        ttk.Label(self.rise_fall_tab, text="CH1 Risetime: ").grid(row=1, column=0, padx=5, pady=2, sticky="w")
+        self.ch1_risetime = ttk.Label(self.rise_fall_tab, text="--")
+        self.ch1_risetime.grid(row=1, column=1, padx=5, pady=2, sticky="w")
+        
+        ttk.Label(self.rise_fall_tab, text="CH1 Falltime: ").grid(row=2, column=0, padx=5, pady=2, sticky="w")
+        self.ch1_falltime = ttk.Label(self.rise_fall_tab, text="--")
+        self.ch1_falltime.grid(row=2, column=1, padx=5, pady=2, sticky="w")
+        
+        ttk.Label(self.rise_fall_tab, text="CH2 Risetime: ").grid(row=3, column=0, padx=5, pady=2, sticky="w")
+        self.ch2_risetime = ttk.Label(self.rise_fall_tab, text="--")
+        self.ch2_risetime.grid(row=3, column=1, padx=5, pady=2, sticky="w")
+        
+        ttk.Label(self.rise_fall_tab, text="CH2 Falltime: ").grid(row=4, column=0, padx=5, pady=2, sticky="w")
+        self.ch2_falltime = ttk.Label(self.rise_fall_tab, text="--")
+        self.ch2_falltime.grid(row=4, column=1, padx=5, pady=2, sticky="w")
+        
+        
+        # 获取电压测量值按钮
+        self.get_rise_fall_button = ttk.Button(self.rise_fall_tab, text="获取Rise/Fall测量值", command=self.get_rise_fall_measurements)
+        self.get_rise_fall_button.grid(row=5, column=0, columnspan=4, padx=5, pady=10)
+
+        # Screenshot
+        self.get_rise_fall_screenshot_button = ttk.Button(self.rise_fall_tab, text="Save Screenshot", command=lambda: self.save_screenshot("RiseFall"))
+        self.get_rise_fall_screenshot_button.grid(row=6, column=0, columnspan=4, padx=10, pady=10)
 
     def get_voltage_measurements(self):
         if not self.controller.connected:
@@ -1068,6 +1681,29 @@ class MSO64ControllerGUI:
             self.ch2_base_value.config(text=f"{measurements['CH2_Base']} V")
             
             messagebox.showinfo("成功", "电压测量值获取成功")
+        else:
+            messagebox.showerror("错误", message)
+    
+    def get_rise_fall_measurements(self):
+        if not self.controller.connected:
+            messagebox.showerror("错误", "未连接到示波器")
+            return
+        if self.measured_rise_fall==False:
+            messagebox.showerror("错误", "Rise/Fall has not been measured")
+            return
+        self.log_message("正在获取Rise/Fall测量值...")
+        success, message, measurements = self.controller.get_rise_fall_measurements()
+        self.res.update(measurements)
+        self.log_message(message)
+        
+        if success:
+            # 更新电压测量值显示
+            self.ch1_risetime.config(text=f"{measurements['CH1_Rise']} s")
+            self.ch1_falltime.config(text=f"{measurements['CH1_Fall']} s")
+            self.ch2_risetime.config(text=f"{measurements['CH2_Rise']} s")
+            self.ch2_falltime.config(text=f"{measurements['CH2_Fall']} s")
+            
+            messagebox.showinfo("成功", "Rise/Fall测量值获取成功")
         else:
             messagebox.showerror("错误", message)
     
@@ -1112,6 +1748,67 @@ class MSO64ControllerGUI:
             messagebox.showinfo("成功", "Setup Time测量值获取成功")
         else:
             messagebox.showerror("错误", message)
+
+    def get_hold_time_measurement(self):
+        if not self.controller.connected:
+            messagebox.showerror("错误", "未连接到示波器")
+            return
+        if self.measured_hold==False:
+            messagebox.showerror("错误", "Hold Time has not been measured")
+            return
+        self.log_message("正在获取Hold Time测量值...")
+        success, message, measurements = self.controller.get_hold_measurement()
+        self.res.update(measurements)
+        self.log_message(message)
+        
+        if success:
+            # 更新延迟测量值显示
+            self.hold_time_value.config(text=f"{measurements['Delay_Fall_Edge_30_70']} s")
+            
+            messagebox.showinfo("成功", "Hold Time测量值获取成功")
+        else:
+            messagebox.showerror("错误", message)
+
+    def get_start_hold_time_measurement(self):
+        if not self.controller.connected:
+            messagebox.showerror("错误", "未连接到示波器")
+            return
+        if self.measured_start_hold==False:
+            messagebox.showerror("错误", "Start Hold Time has not been measured")
+            return
+        self.log_message("正在获取Start Hold Time测量值...")
+        success, message, measurements = self.controller.get_start_hold_time()
+        self.res.update(measurements)
+        self.log_message(message)
+        
+        if success:
+            # 更新延迟测量值显示
+            self.start_hold_time_value.config(text=f"{measurements['Start Hold Time']} s")
+            
+            messagebox.showinfo("成功", "Start Hold Time测量值获取成功")
+        else:
+            messagebox.showerror("错误", message)
+
+    def get_stop_setup_time_measurement(self):
+        if not self.controller.connected:
+            messagebox.showerror("错误", "未连接到示波器")
+            return
+        if self.measured_stop_setup==False:
+            messagebox.showerror("错误", "Stop Setup Time has not been measured")
+            return
+        self.log_message("正在获取Stop Setup Time测量值...")
+        success, message, measurements = self.controller.get_stop_time_measurement()
+        self.res.update(measurements)
+        self.log_message(message)
+        
+        if success:
+            # 更新延迟测量值显示
+            self.stop_setup_time_value.config(text=f"{measurements['Stop Time']} s")
+            
+            messagebox.showinfo("成功", "Stop Setup Time测量值获取成功")
+        else:
+            messagebox.showerror("错误", message)
+
 
     def run_test(self):
         if not self.controller.connected:
@@ -1224,6 +1921,21 @@ class MSO64ControllerGUI:
         self.get_screenshot_button.config(state=state)
         self.frequency_screenshot_button.config(state=state)
         self.setup_screenshot_button.config(state=state)
+        self.rise_fall_button.config(state=state)
+        self.get_rise_fall_button.config(state=state)
+        self.get_rise_fall_screenshot_button.config(state=state)
+        self.hold_time_button.config(state=state)
+        self.get_hold_time_button.config(state=state)
+        self.hold_time_screenshot_button.config(state=state)
+        self.start_hold_time_button.config(state=state)
+        self.get_stop_setup_time_button.config(state=state)
+        self.stop_setup_time_screenshot_button.config(state=state)
+        self.stop_setup_time_button.config(state=state)
+        self.get_start_hold_time_button.config(state=state)
+        self.start_hold_time_screenshot_button.config(state=state)
+        self.run_all_tests_button.config(state=state)
+
+    
 
     
 
@@ -1231,12 +1943,11 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = MSO64ControllerGUI(root)
     root.mainloop() 
+    
 """
 controller=MSO64Controller()
-controller.connect('169.254.103.178')
-suc, msg=controller.zoom_on_falling_edge()
-print(suc)
+controller.connect('169.254.123.124')
+suc, msg=controller.zoom_stop()
+controller.add_stop_time_measurement()
 """
-
-
 
