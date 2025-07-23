@@ -1,0 +1,4 @@
+Name,Measurement,Label,Source,Mean',Min',Max',Pk-Pk',Std Dev',Population',Accum-Mean,Accum-Min,Accum-Max,Accum-Pk-Pk,Accum-Std Dev,Accum-Population
+Meas1, Frequency, Frequency," Ch 1 ",199.99 kHz,199.74 kHz,200.23 kHz,492.05 Hz,246.45 Hz,6,199.99 kHz,199.74 kHz,200.23 kHz,492.05 Hz,246.45 Hz,6
+Meas2, Positive Pulse Width, Positive Pulse Width," Ch 1 ",2.2433 us,2.2316 us,2.2557 us,24.102 ns,8.6280 ns,6,2.2433 us,2.2316 us,2.2557 us,24.102 ns,8.6280 ns,6
+Meas3, Negative Pulse Width, Negative Pulse Width," Ch 1 ",2.5695 us,2.5654 us,2.5744 us,8.9648 ns,3.8418 ns,6,2.5695 us,2.5654 us,2.5744 us,8.9648 ns,3.8418 ns,6

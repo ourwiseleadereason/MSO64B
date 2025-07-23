@@ -1,0 +1,4 @@
+Value,Mean,Min,Max,St Dev,Count,info
+199990.0,199990.0,199740.0,200230.0,246.45 Hz,6," Frequency(CH2,CH1)"
+2.2433,2.2433,2.2316,2.2557,8.6280 ns,6," Positive Pulse Width(CH2,CH1)"
+2.5695,2.5695,2.5654,2.5744,3.8418 ns,6," Negative Pulse Width(CH2,CH1)"

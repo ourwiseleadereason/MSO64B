@@ -1,0 +1,5 @@
+Name,Measurement,Label,Source,Mean,Min,Max,Pk-Pk,Std Dev,Population,Accum-Mean,Accum-Min,Accum-Max,Accum-Pk-Pk,Accum-Std Dev,Accum-Population,
+Meas1, Rise Time, Rise Time," Ch 1 ",181.14 ns,173.54 ns,186.28 ns,12.745 ns,4.5820 ns,6,181.14 ns,173.54 ns,186.28 ns,12.745 ns,4.5820 ns,6, , , , , , , , , , , , 
+Meas2, Fall Time, Fall Time," Ch 1 ",6.2591 ns,5.4747 ns,7.2240 ns,1.7493 ns,747.65 ps,7,6.2591 ns,5.4747 ns,7.2240 ns,1.7493 ns,747.65 ps,7, , , , , , , , , , , , 
+Meas3, Rise Time, Rise Time," Ch 2 ",198.93 ns,198.93 ns,198.93 ns,0.0000 s,0.0000 s,1,198.93 ns,198.93 ns,198.93 ns,0.0000 s,0.0000 s,1, , , , , , , , , , , , 
+Meas4, Fall Time, Fall Time," Ch 2 ",7.3532 ns,5.9434 ns,8.7630 ns,2.8197 ns,1.9938 ns,2,7.3532 ns,5.9434 ns,8.7630 ns,2.8197 ns,1.9938 ns,2, , , , , , , , , , , , 
