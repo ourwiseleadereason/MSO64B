@@ -621,7 +621,71 @@ class MSO64Controller:
             return True, "success"
         except Exception as e:
             return False, f"添加setup time测量项失败: {str(e)}"
-    
+        
+    def save_csv(self, filename, filepath):
+        self.scope.write(f'SAVe:EVENTtable:MEASUrement "C:\\Test\\{filename+".csv"}"')
+        self.scope.query("*OPC?")
+        self.scope.write(f'FILESYSTEM:READFILE "C:\\Test\\{filename+".csv"}"')
+        data=self.scope.read()
+        fid=open(filepath+f"\\{filename}.csv", 'w')
+        fid.write(data)
+        fid.close()
+        # Step 1: Read all lines
+        with open(filepath+f"\\{filename}.csv", 'r') as file:
+            lines = file.readlines()
+        lines=lines[8:]
+        new_lines=[]
+        for i in lines:
+            if i!='\n':
+                new_lines.append(i)
+        # Step 3: Overwrite the file
+        with open(filepath+f"\\{filename}.csv", 'w') as file:
+            file.writelines(new_lines)
+        
+        #step 4: clean the csv file
+        with open(filepath+f"\\{filename}.csv", 'r') as file:
+            lines = file.readlines()
+        lines = [line.strip() for line in lines]
+        cleaned_data = [entry.rstrip(', ').rstrip() for entry in lines]
+        for i in range(len(cleaned_data)):
+            cleaned_data[i]+='\n'
+
+        with open(filepath+f"\\{filename}.csv", 'w') as file:
+            file.writelines(cleaned_data)
+        def extract_unit(entry):
+            return entry.split(' ')[1]
+
+        def process(x):
+            entries = x.split(' ')
+            multiplier = 1
+            unit = entries[1]
+            if unit == "kHz":
+                multiplier = 1/1000
+            elif unit == "ns":
+                multiplier = 1e9
+            elif unit == "us":
+                multiplier = 1e6
+            return float(entries[0]) / multiplier
+
+                # Read original data
+        df = pd.read_csv(filepath + f"\\{filename}.csv")
+
+        # Add Unit column to df
+        df["Unit"] = df["Mean'"].apply(extract_unit)
+
+        # Now process values and build df2
+        df2 = pd.DataFrame()
+        df2['Value'] = df["Mean'"].apply(process)
+        df2['Mean'] = df["Mean'"].apply(process)
+        df2['Min'] = df["Min'"].apply(process)
+        df2['Max'] = df["Max'"].apply(process)
+        df2['St Dev'] = df["Std Dev'"].apply(process)
+        df2['Count'] = df["Population'"]
+        df2['info'] = df[' Measurement'] + f"({self.channels['SDA']},{self.channels['SCL']})"
+        df2['Unit']=df['Unit']
+        # Export df2 to CSV
+        df2.to_csv(filepath + f"\\{filename}.csv", index=False)
+        
 class MSO64ControllerGUI:
     def __init__(self, root):
         self.root = root
@@ -635,6 +699,7 @@ class MSO64ControllerGUI:
         self.controller.channels['SDA']=self.data_var.get()
         self.excel_path=None
         self.image_path=None
+        self.csv_path=None
 
     def create_widgets(self):
         connection_frame = ttk.LabelFrame(self.root, text="连接设置")
@@ -891,8 +956,15 @@ class MSO64ControllerGUI:
             os.makedirs(waveform_path, exist_ok=True)
             self.image_path = waveform_path
             self.image_path_entry.insert(0, self.image_path)
+
+            #define the csv path too!
+            csv_path=os.path.join(i2c_path, "csv")
+            print(csv_path)
+            os.makedirs(csv_path, exist_ok=True)
+            self.csv_path=csv_path
             
             self.log_message(f"已选择图片保存路径: {self.image_path}")
+            self.log_message(f"已选择CSV保存路径: {self.csv_path}")
 
     def log_message(self, message):
         self.log_text.insert(tk.END, f"{datetime.now().strftime('%H:%M:%S')} - {message}\n")
@@ -1251,6 +1323,7 @@ class MSO64ControllerGUI:
         else:
             messagebox.showerror("错误", msg)
         self.controller.scope.write("*WAI")
+        self.save_csv("v")
         self.save_screenshot("Voltage", "v")
 
     def write_frequency(self, display=True):
@@ -1409,7 +1482,6 @@ class MSO64ControllerGUI:
         self.save_screenshot("Fall Time", "f")
         self.save_data_to_excel()
         
-
     def save_screenshot(self, name, filename):
         if self.folder_entry==None:
             messagebox.showerror("错误", "Folder name has not been configured")
@@ -1422,6 +1494,15 @@ class MSO64ControllerGUI:
         if suc:
             self.images[name]=self.image_path+f"\\{self.folder_entry.get()}\\{filename}.png"
         self.log_message(msg)
+
+    def save_csv(self, filename):
+        if self.folder_entry==None:
+            messagebox.showerror("错误", "Folder name has not been configured")
+            return
+        foldername=self.folder_entry.get()
+        path=os.path.join(self.csv_path, foldername)
+        os.makedirs(path, exist_ok=True)
+        self.controller.save_csv(filename, path)
 
     def update_voltage(self):
         self.scl_max_value.config(text=f"{self.res['SCL_Maximum']} V")
